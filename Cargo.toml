@@ -1,0 +1,18 @@
+[package]
+name = "anymock"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tungstenite = "0.28.0"
+serde = "1.0.228"
+serde_json = "1.0.145"
+
+[lib]
+name = "anymock"
+path = "src/lib.rs"
+
+
+[[test]]
+name = "ws"
+path = "tests/ws.rs"
