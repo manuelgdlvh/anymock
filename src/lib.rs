@@ -1,39 +1,24 @@
-// Stubs like request / response. Or PlainTextBased / PlainTextResponse.
-// MockServers
-
-// Http.
-// Allow Regex/Matchers/Placeholders support. Delays.
-// Request: Method, Path, Body (Plain or Json. application/*), Header, Priority (automatically handled by how much attributes are informed)
-// Response: Status Code, Headers, Body (Plain or Json, application/*)
-// Default fallback response.
-//
-//
-//
-// Websocket.
-// Allow Regex/Matchers/Placeholders support. Delays.
-// Request: Path, Body (Plain or Json. application/*), Header, Priority (automatically handled by how much attributes are informed)
-// Response: Body, Headers
-// Default fallback response
-//
-//
-//
-// MockServer, Stubs, Matcher for all fields.
-
-// No need to abstract Message protocol. Each server instance can handle more than one protocol at the same time.
-
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, TcpListener},
     sync::{
-        Arc, Mutex, RwLock,
+        Arc, RwLock,
         mpsc::{Receiver, SendError, SyncSender},
     },
     thread,
     time::Duration,
 };
 
-use serde_json::{Number, Value};
+use serde_json::Value;
 use tungstenite::{Bytes, Message, Utf8Bytes, accept_hdr};
+
+use crate::{
+    json::JsonValue,
+    matchers::{BodyMatcher, TextMatcher},
+};
+
+mod json;
+mod matchers;
 
 pub struct WsMockServer {
     addr: IpAddr,
@@ -130,8 +115,6 @@ impl WsMockServer {
                 thread::spawn({
                     let stubs_registry = StubsRegistry::clone(&stubs_registry);
 
-                    // Check On Connect
-
                     if let Some(msg) = stubs_registry.on_connect(&headers) {
                         websocket.send(msg).unwrap();
                     }
@@ -139,12 +122,31 @@ impl WsMockServer {
                     move || {
                         loop {
                             match websocket.read() {
-                                Ok(msg) if msg.is_binary() => {}
-                                Ok(msg) if msg.is_text() => {
-                                    // Check on_message stubs
+                                Ok(msg) if msg.is_binary() => {
+                                    let payload = Body::Binary(msg.into_data().into());
+                                    if let Some(message) =
+                                        stubs_registry.on_message(payload, &headers)
+                                    {
+                                        websocket.send(message).unwrap();
+                                    }
                                 }
-                                Ok(msg) => {}
-                                Err(err) => {
+                                Ok(msg) if msg.is_text() => {
+                                    let msg_buf = msg.into_text().unwrap();
+                                    let msg_str = msg_buf.as_str();
+
+                                    let payload = match JsonValue::try_from(msg_str) {
+                                        Ok(json) => Body::Json(json),
+                                        Err(_) => Body::PlainText(msg_buf.as_str().to_string()),
+                                    };
+
+                                    if let Some(message) =
+                                        stubs_registry.on_message(payload, &headers)
+                                    {
+                                        websocket.send(message).unwrap();
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(_) => {
                                     break;
                                 }
                             }
@@ -160,7 +162,6 @@ impl WsMockServer {
 pub struct StubsRegistry {
     on_connect: Arc<RwLock<Vec<Stub>>>,
     on_message: Arc<RwLock<Vec<Stub>>>,
-    fallback: Arc<Mutex<Option<Stub>>>,
 }
 
 impl StubsRegistry {
@@ -176,23 +177,42 @@ impl StubsRegistry {
                     on_message.push(stub);
                 }
             }
-            Stub::Fallback { .. } => {
-                if let Ok(mut fallback) = self.fallback.lock() {
-                    *fallback = Some(stub);
-                }
-            }
         }
     }
 
     pub fn on_connect(&self, headers: &HashMap<String, String>) -> Option<Message> {
-        let mut last_occurences = 0;
+        let mut current_matchings = 0;
         let mut current_stub: Option<&Stub> = None;
 
         if let Ok(on_connect) = self.on_connect.read() {
             for stub in on_connect.iter() {
-                if let Some(occurences) = stub.matching_rules(headers) {
-                    if occurences > last_occurences {
-                        last_occurences = occurences;
+                if let Some(matchings) = stub.matching_rules(None, headers) {
+                    if matchings > current_matchings {
+                        current_matchings = matchings;
+                        current_stub = Some(stub);
+                    }
+                }
+            }
+
+            if let Some(stub) = current_stub {
+                Some(stub.message())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn on_message(&self, payload: Body, headers: &HashMap<String, String>) -> Option<Message> {
+        let mut current_matchings = 0;
+        let mut current_stub: Option<&Stub> = None;
+
+        if let Ok(on_connect) = self.on_connect.read() {
+            for stub in on_connect.iter() {
+                if let Some(matchings) = stub.matching_rules(Some(&payload), headers) {
+                    if matchings > current_matchings {
+                        current_matchings = matchings;
                         current_stub = Some(stub);
                     }
                 }
@@ -239,27 +259,31 @@ impl WsMockInstance {
 pub enum Stub {
     Connect {
         headers: Option<HashMap<String, TextMatcher>>,
-        response: Response,
+        response: ResponseStub,
     },
     Message {
-        request: Request,
-        response: Response,
-    },
-    Fallback {
-        response: Response,
+        request: RequestMatcher,
+        response: ResponseStub,
     },
 }
 
 impl Stub {
-    pub fn matching_rules(&self, session_headers: &HashMap<String, String>) -> Option<u16> {
+    pub fn matching_rules(
+        &self,
+        payload: Option<&Body>,
+        session_headers: &HashMap<String, String>,
+    ) -> Option<u16> {
         match self {
             Self::Connect { headers, .. } => {
-                if let Some(headers) = headers {
+                if let Some(header_matchers) = headers {
                     let mut matchings = 0;
-                    for (k, v) in session_headers.iter() {
-                        if let Some(matcher) = headers.get(k) {
-                            if matcher.matches(v) {
+
+                    for (k, matcher) in header_matchers.iter() {
+                        if let Some(header) = session_headers.get(k) {
+                            if matcher.matches(header) {
                                 matchings += 1;
+                            } else {
+                                return None;
                             }
                         }
                     }
@@ -270,11 +294,14 @@ impl Stub {
             }
             Self::Message { request, .. } => {
                 let mut matchings = 0;
-                if let Some(headers) = request.headers.as_ref() {
-                    for (k, v) in session_headers.iter() {
-                        if let Some(matcher) = headers.get(k) {
-                            if matcher.matches(v) {
+
+                if let Some(header_matchers) = request.headers.as_ref() {
+                    for (k, matcher) in header_matchers.iter() {
+                        if let Some(header) = session_headers.get(k) {
+                            if matcher.matches(header) {
                                 matchings += 1;
+                            } else {
+                                return None;
                             }
                         }
                     }
@@ -282,18 +309,29 @@ impl Stub {
                     matchings += 1;
                 }
 
-                // Add payload also as contributor
+                let payload_matchings = match (payload, request.payload.as_ref()) {
+                    (Some(payload), Some(matcher)) => matcher.matches(payload),
+                    (Some(_), None) => Some(1),
+                    (None, Some(_)) => None,
+                    (None, None) => Some(1),
+                };
+
+                if let Some(payload_matchings) = payload_matchings {
+                    matchings += payload_matchings;
+                } else {
+                    return None;
+                }
+
                 Some(matchings)
             }
-            Self::Fallback { .. } => Some(1),
         }
     }
 
     pub fn message(&self) -> Message {
         match self {
-            Self::Connect { response, .. }
-            | Self::Message { response, .. }
-            | Self::Fallback { response } => match &response.payload {
+            Self::Connect { response, .. } | Self::Message { response, .. } => match &response
+                .payload
+            {
                 Body::Json(json) => Message::Text(Utf8Bytes::from(&Value::from(json).to_string())),
                 Body::PlainText(text) => Message::Text(Utf8Bytes::from(text.as_str())),
                 Body::Binary(binary) => Message::Binary(Bytes::from(binary.clone())),
@@ -302,128 +340,39 @@ impl Stub {
     }
 }
 
-pub struct Request {
+pub struct RequestMatcher {
     headers: Option<HashMap<String, TextMatcher>>,
-    payload: Body,
+    payload: Option<BodyMatcher>,
 }
 
-pub struct Response {
+// TODO: Generic?
+pub struct ResponseStub {
     payload: Body,
-    delay: Option<Delay>,
+    delay: Option<DelayStub>,
 }
 
-pub enum Delay {
+pub fn returning(payload: Body) -> ResponseStub {
+    ResponseStub {
+        payload,
+        delay: None,
+    }
+}
+impl ResponseStub {
+    pub fn with_delay(mut self, delay: DelayStub) -> Self {
+        self.delay = Some(delay);
+        self
+    }
+}
+
+pub enum DelayStub {
     Fixed(u32),
     Randomized(u32, u32),
 }
 
-// No  specific of WebSocket.
+//TODO: No  specific of WebSocket.
 
-enum Body {
+pub enum Body {
     Json(JsonValue),
     Binary(Vec<u8>),
     PlainText(String),
-}
-
-// Use serde_json as mapping between JsonValue (outside) and Value (inside). Well known library for json parsing.
-enum JsonValue {
-    Null,
-    Bool(bool),
-    Str(String),
-    Float(f64),
-    PositiveInt(u64),
-    NegativeInt(i64),
-    List(Vec<JsonValue>),
-    Object(HashMap<String, JsonValue>),
-}
-
-impl From<&JsonValue> for Value {
-    fn from(value: &JsonValue) -> Self {
-        match value {
-            JsonValue::Null => Value::Null,
-            JsonValue::Bool(val) => Value::Bool(*val),
-            JsonValue::Str(val) => Value::String(val.to_string()),
-            JsonValue::Float(val) => Value::Number(Number::from_f64(*val).unwrap()),
-            JsonValue::PositiveInt(val) => Value::Number(Number::from_u128(*val as u128).unwrap()),
-            JsonValue::NegativeInt(val) => Value::Number(Number::from_i128(*val as i128).unwrap()),
-            JsonValue::List(list) => {
-                Value::Array(list.into_iter().map(|v| Value::from(v)).collect())
-            }
-            JsonValue::Object(map) => Value::Object(
-                map.iter()
-                    .map(|(k, v)| (k.to_string(), Value::from(v)))
-                    .collect(),
-            ),
-        }
-    }
-}
-
-// Useful for the external library users
-
-impl TryFrom<&str> for JsonValue {
-    type Error = std::io::Error;
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let value = serde_json::from_str::<Value>(value)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidInput, err))?;
-        Ok(JsonValue::from(value))
-    }
-}
-impl From<Value> for JsonValue {
-    fn from(value: Value) -> Self {
-        match value {
-            Value::Null => JsonValue::Null,
-            Value::Bool(val) => JsonValue::Bool(val),
-            Value::Number(val) => {
-                if val.is_i64() {
-                    JsonValue::NegativeInt(val.as_i64().unwrap())
-                } else if val.is_u64() {
-                    JsonValue::PositiveInt(val.as_u64().unwrap())
-                } else if val.is_f64() {
-                    JsonValue::Float(val.as_f64().unwrap())
-                } else {
-                    unreachable!()
-                }
-            }
-            Value::String(val) => JsonValue::Str(val),
-            Value::Array(list) => JsonValue::List(
-                list.into_iter()
-                    .map(|val| JsonValue::from(val))
-                    .collect::<Vec<JsonValue>>(),
-            ),
-            Value::Object(map) => JsonValue::Object(
-                map.into_iter()
-                    .map(|(k, v)| (k, JsonValue::from(v)))
-                    .collect(),
-            ),
-        }
-    }
-}
-
-// Matchers
-
-pub enum Matcher {
-    Text(TextMatcher),
-    Number(NumberMatcher),
-}
-
-pub enum NumberMatcher {
-    Eq(i64),
-    LessThan(i64),
-    GreaterThan(i64),
-}
-
-pub enum TextMatcher {
-    Regex(String),
-    Eq(String),
-    Contains(String),
-}
-
-impl TextMatcher {
-    pub fn matches(&self, value: &str) -> bool {
-        match self {
-            TextMatcher::Regex(_) => false,
-            TextMatcher::Eq(part) => value.eq(part),
-            TextMatcher::Contains(part) => value.contains(part),
-        }
-    }
 }
