@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 
 use serde_json::Value;
@@ -31,35 +32,28 @@ impl StubsHandle {
     }
 
     pub(crate) fn on_connect(&self, headers: &HashMap<String, String>) -> Option<Message> {
-        let mut current_score = 0;
-        let mut current_stub: Option<&Stub> = None;
-
-        if let Ok(on_connect) = self.on_connect.read() {
-            for stub in on_connect.iter() {
-                let score = stub.score(None, headers);
-                if score > current_score {
-                    current_score = score;
-                    current_stub = Some(stub);
-                }
-            }
-
-            current_stub.map(|stub| stub.message())
-        } else {
-            None
-        }
+        Self::get_message(&self.on_connect, headers, None)
     }
 
     pub(crate) fn on_message(
         &self,
-        payload: Body,
         headers: &HashMap<String, String>,
+        payload: Body,
+    ) -> Option<Message> {
+        Self::get_message(&self.on_message, headers, Some(&payload))
+    }
+
+    fn get_message(
+        stubs: &RwLock<Vec<Stub>>,
+        headers: &HashMap<String, String>,
+        payload: Option<&Body>,
     ) -> Option<Message> {
         let mut current_score = 0;
         let mut current_stub: Option<&Stub> = None;
 
-        if let Ok(on_connect) = self.on_connect.read() {
-            for stub in on_connect.iter() {
-                let score = stub.score(Some(&payload), headers);
+        if let Ok(on_message) = stubs.read() {
+            for stub in on_message.iter() {
+                let score = stub.score(payload, headers);
                 if score > current_score {
                     current_score = score;
                     current_stub = Some(stub);
@@ -152,8 +146,8 @@ impl Stub {
 }
 
 pub struct RequestMatcher {
-    headers: Option<HashMap<String, TextMatcher>>,
-    payload: Option<BodyMatcher>,
+    pub(crate) headers: Option<HashMap<String, TextMatcher>>,
+    pub(crate) payload: Option<BodyMatcher>,
 }
 
 pub struct ResponseStub {
@@ -162,6 +156,6 @@ pub struct ResponseStub {
 }
 
 pub enum DelayStub {
-    Fixed(u32),
+    Fixed(Duration),
     Randomized(u32, u32),
 }

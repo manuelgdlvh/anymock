@@ -1,10 +1,14 @@
-use std::{collections::HashMap, sync::atomic::AtomicU16};
+use std::{collections::HashMap, net::TcpStream, sync::atomic::AtomicU16};
 
 use anymock::{
+    json::JsonValue,
     matchers::{text_contains, text_eq},
-    ws::{Server, ServerHandle, builders::on_connect},
+    ws::{
+        Server, ServerHandle,
+        builders::{on_connect, on_message},
+    },
 };
-use tungstenite::{Message, connect, handshake::client::Request};
+use tungstenite::{Message, WebSocket, handshake::client::Request, stream::MaybeTlsStream};
 
 macro_rules! map {
     ( $( $key:expr => $value:expr ),* $(,)? ) => {{
@@ -26,7 +30,8 @@ fn should_returns_on_connect_when_no_headers_matchers_defined() {
 
     handle.register(on_connect().returning_text(OUTPUT_MESSAGE));
 
-    let msg = connect_and_read(&handle, HashMap::new());
+    let mut client = connect(&handle);
+    let msg = client.read().unwrap();
     assert!(msg.is_text());
     assert_eq!(msg.into_text().unwrap(), OUTPUT_MESSAGE);
 }
@@ -43,12 +48,14 @@ fn should_returns_on_connect_when_headers_matchers_defined() {
             .returning_text(OUTPUT_MESSAGE),
     );
 
-    let msg = connect_and_read(
+    let mut client = connect_hdr(
         &handle,
         map![
             "Authorization" => "AAABBBCCCDDD",
         ],
     );
+
+    let msg = client.read().unwrap();
     assert!(msg.is_text());
     assert_eq!(msg.into_text().unwrap(), OUTPUT_MESSAGE);
 }
@@ -81,15 +88,44 @@ fn should_returns_on_connect_message_with_highest_priority() {
             .returning_text(OUTPUT_MESSAGE_3),
     );
 
-    let msg = connect_and_read(
+    let mut client = connect_hdr(
         &handle,
         map![
             "Authorization" => "AAABBBCCCDDD",
             "Dummy-Header" => "Dummy",
         ],
     );
+
+    let msg = client.read().unwrap();
     assert!(msg.is_text());
     assert_eq!(msg.into_text().unwrap(), OUTPUT_MESSAGE_3);
+}
+
+#[test]
+fn should_returns_on_message_when_json_body_eq() {
+    const OUTPUT_MESSAGE: &str = "Just works!";
+    const JSON: &str = r#"
+{
+  "name": "John",
+  "age": 30,
+  "tags": ["dev", "rust", "json"]
+}
+"#;
+
+    let handle = listen();
+
+    handle.register(
+        on_message()
+            .with_json_body_eq(JsonValue::try_from(JSON).unwrap())
+            .returning_text(OUTPUT_MESSAGE),
+    );
+
+    let mut client = connect(&handle);
+
+    client.send(Message::Text(JSON.into())).unwrap();
+    let msg = client.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), OUTPUT_MESSAGE);
 }
 
 fn listen() -> ServerHandle {
@@ -103,7 +139,14 @@ fn listen() -> ServerHandle {
     }
 }
 
-fn connect_and_read(handle: &ServerHandle, headers: HashMap<&str, &str>) -> Message {
+fn connect(handle: &ServerHandle) -> WebSocket<MaybeTlsStream<TcpStream>> {
+    connect_hdr(handle, HashMap::new())
+}
+
+fn connect_hdr(
+    handle: &ServerHandle,
+    headers: HashMap<&str, &str>,
+) -> WebSocket<MaybeTlsStream<TcpStream>> {
     let conn_string = format!("ws://{}:{}", handle.addr(), handle.port());
     let mut req_builder = Request::builder()
         .method("GET")
@@ -118,6 +161,5 @@ fn connect_and_read(handle: &ServerHandle, headers: HashMap<&str, &str>) -> Mess
     }
 
     let req = req_builder.uri(conn_string.as_str()).body(()).unwrap();
-    let mut client = connect(req).unwrap();
-    client.0.read().unwrap()
+    tungstenite::connect(req).unwrap().0
 }

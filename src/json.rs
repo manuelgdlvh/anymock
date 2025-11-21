@@ -7,8 +7,7 @@ pub enum JsonValue {
     Bool(bool),
     Str(String),
     Float(f64),
-    PositiveInt(u64),
-    NegativeInt(i64),
+    Int(i128),
     List(Vec<JsonValue>),
     Object(HashMap<String, JsonValue>),
 }
@@ -20,8 +19,7 @@ impl From<&JsonValue> for Value {
             JsonValue::Bool(val) => Value::Bool(*val),
             JsonValue::Str(val) => Value::String(val.to_string()),
             JsonValue::Float(val) => Value::Number(Number::from_f64(*val).unwrap()),
-            JsonValue::PositiveInt(val) => Value::Number(Number::from_u128(*val as u128).unwrap()),
-            JsonValue::NegativeInt(val) => Value::Number(Number::from_i128(*val as i128).unwrap()),
+            JsonValue::Int(val) => Value::Number(Number::from_i128(*val).unwrap()),
             JsonValue::List(list) => Value::Array(list.iter().map(Value::from).collect()),
             JsonValue::Object(map) => Value::Object(
                 map.iter()
@@ -49,9 +47,9 @@ impl From<Value> for JsonValue {
             Value::Bool(val) => JsonValue::Bool(val),
             Value::Number(val) => {
                 if val.is_i64() {
-                    JsonValue::NegativeInt(val.as_i64().unwrap())
+                    JsonValue::Int(val.as_i64().unwrap().into())
                 } else if val.is_u64() {
-                    JsonValue::PositiveInt(val.as_u64().unwrap())
+                    JsonValue::Int(val.as_u64().unwrap().into())
                 } else if val.is_f64() {
                     JsonValue::Float(val.as_f64().unwrap())
                 } else {

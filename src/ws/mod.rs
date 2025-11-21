@@ -94,7 +94,7 @@ impl Server {
                         match websocket.read() {
                             Ok(msg) if msg.is_binary() => {
                                 let payload = Body::Binary(msg.into_data().into());
-                                if let Some(message) = stubs_handle.on_message(payload, &headers) {
+                                if let Some(message) = stubs_handle.on_message(&headers, payload) {
                                     websocket.send(message).unwrap();
                                 }
                             }
@@ -107,7 +107,7 @@ impl Server {
                                     Err(_) => Body::PlainText(msg_buf.as_str().to_string()),
                                 };
 
-                                if let Some(message) = stubs_handle.on_message(payload, &headers) {
+                                if let Some(message) = stubs_handle.on_message(&headers, payload) {
                                     websocket.send(message).unwrap();
                                 }
                             }
