@@ -22,9 +22,7 @@ impl From<&JsonValue> for Value {
             JsonValue::Float(val) => Value::Number(Number::from_f64(*val).unwrap()),
             JsonValue::PositiveInt(val) => Value::Number(Number::from_u128(*val as u128).unwrap()),
             JsonValue::NegativeInt(val) => Value::Number(Number::from_i128(*val as i128).unwrap()),
-            JsonValue::List(list) => {
-                Value::Array(list.into_iter().map(|v| Value::from(v)).collect())
-            }
+            JsonValue::List(list) => Value::Array(list.iter().map(Value::from).collect()),
             JsonValue::Object(map) => Value::Object(
                 map.iter()
                     .map(|(k, v)| (k.to_string(), Value::from(v)))
@@ -63,7 +61,7 @@ impl From<Value> for JsonValue {
             Value::String(val) => JsonValue::Str(val),
             Value::Array(list) => JsonValue::List(
                 list.into_iter()
-                    .map(|val| JsonValue::from(val))
+                    .map(JsonValue::from)
                     .collect::<Vec<JsonValue>>(),
             ),
             Value::Object(map) => JsonValue::Object(

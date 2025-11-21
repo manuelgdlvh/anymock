@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tungstenite = "0.28.0"
+tungstenite = {version = "0.28.0", optional = true}
 serde = "1.0.228"
 serde_json = "1.0.145"
 
@@ -12,7 +12,12 @@ serde_json = "1.0.145"
 name = "anymock"
 path = "src/lib.rs"
 
+[features]
+default = ["ws"]
+ws = ["dep:tungstenite"]
 
 [[test]]
 name = "ws"
 path = "tests/ws.rs"
+
+
