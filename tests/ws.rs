@@ -2,7 +2,8 @@ use std::{collections::HashMap, net::TcpStream, sync::atomic::AtomicU16};
 
 use anymock::{
     json::JsonValue,
-    matchers::{text_contains, text_eq},
+    json_object_entries,
+    matchers::{JsonMatcher, json_int_gt, json_object, json_str_eq, text_contains, text_eq},
     ws::{
         Server, ServerHandle,
         builders::{on_connect, on_message},
@@ -117,6 +118,35 @@ fn should_returns_on_message_when_json_body_eq() {
     handle.register(
         on_message()
             .with_json_body_eq(JsonValue::try_from(JSON).unwrap())
+            .returning_text(OUTPUT_MESSAGE),
+    );
+
+    let mut client = connect(&handle);
+
+    client.send(Message::Text(JSON.into())).unwrap();
+    let msg = client.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), OUTPUT_MESSAGE);
+}
+
+#[test]
+fn should_returns_on_message_when_json_body_like() {
+    const OUTPUT_MESSAGE: &str = "Just works!";
+    const JSON: &str = r#"
+{
+  "name": "John",
+  "age": 30,
+  "tags": ["dev", "rust", "json"]
+}
+"#;
+
+    let handle = listen();
+
+    handle.register(
+        on_message()
+            .with_json_body_like(json_object(
+                json_object_entries!["name" => json_str_eq("John"), "age" => json_int_gt(20)],
+            ))
             .returning_text(OUTPUT_MESSAGE),
     );
 

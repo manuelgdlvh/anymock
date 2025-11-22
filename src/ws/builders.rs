@@ -1,9 +1,9 @@
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use crate::{
     json::JsonValue,
     matchers::{Body, BodyMatcher, JsonMatcher, TextMatcher},
-    ws::stubs::{DelayStub, RequestMatcher, ResponseStub, Stub},
+    ws::stubs::{RequestMatcher, ResponseStub, Stub},
 };
 
 pub fn on_connect() -> OnConnectBuilder {
@@ -13,7 +13,6 @@ pub fn on_connect() -> OnConnectBuilder {
 #[derive(Default)]
 pub struct OnConnectBuilder {
     headers: Option<HashMap<String, TextMatcher>>,
-    delay: Option<DelayStub>,
 }
 
 impl OnConnectBuilder {
@@ -29,18 +28,22 @@ impl OnConnectBuilder {
         self
     }
 
-    pub fn with_fixed_delay(mut self, dur: Duration) -> Self {
-        self.delay = Some(DelayStub::Fixed(dur));
-        self
+    pub fn returning_text(self, text: impl Into<String>) -> Stub {
+        self.build(Body::PlainText(text.into()))
     }
 
-    pub fn returning_text(self, text: impl Into<String>) -> Stub {
+    pub fn returning_json(self, json: impl Into<JsonValue>) -> Stub {
+        self.build(Body::Json(json.into()))
+    }
+
+    pub fn returning_binary(self, buff: impl Into<Vec<u8>>) -> Stub {
+        self.build(Body::Binary(buff.into()))
+    }
+
+    fn build(self, body: Body) -> Stub {
         Stub::Connect {
             headers: self.headers,
-            response: ResponseStub {
-                payload: Body::PlainText(text.into()),
-                delay: self.delay,
-            },
+            response: ResponseStub { payload: body },
         }
     }
 }
@@ -55,7 +58,6 @@ pub fn on_message() -> OnMessageBuilder {
 pub struct OnMessageBuilder {
     headers: Option<HashMap<String, TextMatcher>>,
     payload: Option<BodyMatcher>,
-    delay: Option<DelayStub>,
 }
 
 impl OnMessageBuilder {
@@ -76,21 +78,30 @@ impl OnMessageBuilder {
         self
     }
 
-    pub fn with_fixed_delay(mut self, dur: Duration) -> Self {
-        self.delay = Some(DelayStub::Fixed(dur));
+    pub fn with_json_body_like(mut self, matcher: impl Into<JsonMatcher>) -> Self {
+        self.payload = Some(BodyMatcher::Json(matcher.into()));
         self
     }
 
     pub fn returning_text(self, text: impl Into<String>) -> Stub {
+        self.build(Body::PlainText(text.into()))
+    }
+
+    pub fn returning_json(self, json: impl Into<JsonValue>) -> Stub {
+        self.build(Body::Json(json.into()))
+    }
+
+    pub fn returning_binary(self, buff: impl Into<Vec<u8>>) -> Stub {
+        self.build(Body::Binary(buff.into()))
+    }
+
+    fn build(self, body: Body) -> Stub {
         Stub::Message {
             request: RequestMatcher {
                 headers: self.headers,
                 payload: self.payload,
             },
-            response: ResponseStub {
-                payload: Body::PlainText(text.into()),
-                delay: self.delay,
-            },
+            response: ResponseStub { payload: body },
         }
     }
 }

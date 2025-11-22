@@ -70,7 +70,9 @@ impl Server {
                 move |req: &tungstenite::handshake::server::Request,
                       response: tungstenite::handshake::server::Response| {
                     for (ref header, value) in req.headers() {
-                        headers_ref.insert(header.to_string(), value.to_str().unwrap().to_string());
+                        if let Ok(value) = value.to_str() {
+                            headers_ref.insert(header.to_string(), value.to_string());
+                        }
                     }
 
                     Ok(response)
@@ -86,7 +88,7 @@ impl Server {
                 let stubs_handle = StubsHandle::clone(&stubs_handle);
 
                 if let Some(msg) = stubs_handle.on_connect(&headers) {
-                    websocket.send(msg).unwrap();
+                    let _ = websocket.send(msg);
                 }
 
                 move || {
@@ -95,11 +97,13 @@ impl Server {
                             Ok(msg) if msg.is_binary() => {
                                 let payload = Body::Binary(msg.into_data().into());
                                 if let Some(message) = stubs_handle.on_message(&headers, payload) {
-                                    websocket.send(message).unwrap();
+                                    let _ = websocket.send(message);
                                 }
                             }
                             Ok(msg) if msg.is_text() => {
-                                let msg_buf = msg.into_text().unwrap();
+                                let msg_buf = msg
+                                    .into_text()
+                                    .expect("Checked previously that's text message");
                                 let msg_str = msg_buf.as_str();
 
                                 let payload = match JsonValue::try_from(msg_str) {
@@ -108,7 +112,7 @@ impl Server {
                                 };
 
                                 if let Some(message) = stubs_handle.on_message(&headers, payload) {
-                                    websocket.send(message).unwrap();
+                                    let _ = websocket.send(message);
                                 }
                             }
                             Ok(_) => {}

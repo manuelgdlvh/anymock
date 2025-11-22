@@ -30,8 +30,6 @@ impl From<&JsonValue> for Value {
     }
 }
 
-// Useful for the external library users
-
 impl TryFrom<&str> for JsonValue {
     type Error = std::io::Error;
     fn try_from(value: &str) -> Result<Self, Self::Error> {

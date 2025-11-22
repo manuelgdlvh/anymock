@@ -30,7 +30,6 @@ impl BodyMatcher {
 // Text
 
 pub enum TextMatcher {
-    Regex(String),
     Eq(String),
     Contains(String),
 }
@@ -38,7 +37,6 @@ pub enum TextMatcher {
 impl TextMatcher {
     pub fn score(&self, value: &str) -> u16 {
         match self {
-            TextMatcher::Regex(_) => todo!(),
             TextMatcher::Eq(part) if value.eq(part) => 2,
             TextMatcher::Contains(part) if value.contains(part) => 1,
             _ => 0,
@@ -75,12 +73,32 @@ impl BinaryMatcher {
     }
 }
 
+pub fn binary_eq(buff: impl Into<Vec<u8>>) -> BinaryMatcher {
+    BinaryMatcher::Eq(buff.into())
+}
+
+pub fn binary_contains(buff: impl Into<Vec<u8>>) -> BinaryMatcher {
+    BinaryMatcher::Contains(buff.into())
+}
+
 // Numbers
 
 pub enum IntMatcher {
     Eq(i128),
     LessThan(i128),
     GreaterThan(i128),
+}
+
+pub fn int_eq(num: impl Into<i128>) -> IntMatcher {
+    IntMatcher::Eq(num.into())
+}
+
+pub fn int_lt(num: impl Into<i128>) -> IntMatcher {
+    IntMatcher::LessThan(num.into())
+}
+
+pub fn int_gt(num: impl Into<i128>) -> IntMatcher {
+    IntMatcher::GreaterThan(num.into())
 }
 
 impl IntMatcher {
@@ -109,6 +127,18 @@ impl FloatMatcher {
             _ => 0,
         }
     }
+}
+
+pub fn float_eq(num: impl Into<f64>) -> FloatMatcher {
+    FloatMatcher::Eq(num.into())
+}
+
+pub fn float_lt(num: impl Into<f64>) -> FloatMatcher {
+    FloatMatcher::LessThan(num.into())
+}
+
+pub fn float_gt(num: impl Into<f64>) -> FloatMatcher {
+    FloatMatcher::GreaterThan(num.into())
 }
 
 // Json
@@ -168,6 +198,79 @@ impl JsonMatcher {
             (_, _) => 0,
         }
     }
+}
+
+// Composition
+
+#[macro_export]
+macro_rules! json_object_entries {
+    ( $( $key:expr => $value:expr ),* $(,)? ) => {{
+        use std::collections::HashMap;
+        let mut map: HashMap<String, JsonMatcher> = HashMap::new();
+        $(
+            map.insert(($key).into(), $value);
+        )*
+        map
+    }};
+}
+pub fn json_object(object: HashMap<String, JsonMatcher>) -> JsonMatcher {
+    JsonMatcher::Object(object)
+}
+
+#[macro_export]
+macro_rules! json_list_entries {
+    ( $( $value:expr ),* $(,)? ) => {{
+        let mut vec: Vec<JsonMatcher> = Vec::new();
+        $(
+            vec.push($value);
+        )*
+        vec
+    }};
+}
+pub fn json_list(list: Vec<JsonMatcher>) -> JsonMatcher {
+    JsonMatcher::List(list)
+}
+
+// Primitives
+
+pub fn json_str_eq(text: impl Into<String>) -> JsonMatcher {
+    JsonMatcher::Str(text_eq(text.into()))
+}
+
+pub fn json_str_contains(text: impl Into<String>) -> JsonMatcher {
+    JsonMatcher::Str(text_contains(text.into()))
+}
+
+// Int
+
+pub fn json_int_eq(num: impl Into<i128>) -> JsonMatcher {
+    JsonMatcher::Int(int_eq(num.into()))
+}
+
+pub fn json_int_gt(num: impl Into<i128>) -> JsonMatcher {
+    JsonMatcher::Int(int_gt(num.into()))
+}
+
+pub fn json_int_lt(num: impl Into<i128>) -> JsonMatcher {
+    JsonMatcher::Int(int_lt(num.into()))
+}
+
+// Float
+
+pub fn json_float_eq(num: impl Into<f64>) -> JsonMatcher {
+    JsonMatcher::Float(float_eq(num.into()))
+}
+
+pub fn json_float_gt(num: impl Into<f64>) -> JsonMatcher {
+    JsonMatcher::Float(float_gt(num.into()))
+}
+
+pub fn json_float_lt(num: impl Into<f64>) -> JsonMatcher {
+    JsonMatcher::Float(float_lt(num.into()))
+}
+
+pub fn json_bool(value: bool) -> JsonMatcher {
+    JsonMatcher::Bool(value)
 }
 
 impl From<JsonValue> for JsonMatcher {

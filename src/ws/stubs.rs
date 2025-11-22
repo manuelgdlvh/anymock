@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
-    time::Duration,
 };
 
 use serde_json::Value;
@@ -48,19 +47,17 @@ impl StubsHandle {
         headers: &HashMap<String, String>,
         payload: Option<&Body>,
     ) -> Option<Message> {
-        let mut current_score = 0;
-        let mut current_stub: Option<&Stub> = None;
+        let mut current_stub: (Option<&Stub>, u16) = (None, 0);
 
         if let Ok(on_message) = stubs.read() {
             for stub in on_message.iter() {
                 let score = stub.score(payload, headers);
-                if score > current_score {
-                    current_score = score;
-                    current_stub = Some(stub);
+                if score > current_stub.1 {
+                    current_stub = (Some(stub), score);
                 }
             }
 
-            current_stub.map(|stub| stub.message())
+            current_stub.0.map(|stub| stub.message())
         } else {
             None
         }
@@ -152,10 +149,4 @@ pub struct RequestMatcher {
 
 pub struct ResponseStub {
     pub(crate) payload: Body,
-    pub(crate) delay: Option<DelayStub>,
-}
-
-pub enum DelayStub {
-    Fixed(Duration),
-    Randomized(u32, u32),
 }
