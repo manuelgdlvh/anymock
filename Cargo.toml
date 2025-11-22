@@ -12,7 +12,7 @@ documentation = "https://docs.rs/anymock/"
 description = "A Rust mocking crate designed to simulate and test external communication over common network protocols."
 
 keywords = [ "ws", "test", "mocking", "mock" ]
-categories = [ "testing", "development-tools" ]
+categories = [ "development-tools::testing", "development-tools" ]
 
 
 [dependencies]
