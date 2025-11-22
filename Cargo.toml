@@ -2,6 +2,18 @@
 name = "anymock"
 version = "0.1.0"
 edition = "2024"
+authors = ["Manuel Garcia De la Vega Hoyo <manuelgdlvh@gmail.com>"]
+
+license = "MIT/Apache-2.0"
+
+repository = "https://github.com/manuelgdlvh/anymock"
+documentation = "https://docs.rs/anymock/"
+
+description = "A Rust mocking crate designed to simulate and test external communication over common network protocols."
+
+keywords = [ "ws", "test", "mocking", "mock" ]
+categories = [ "testing", "development-tools" ]
+
 
 [dependencies]
 tungstenite = {version = "0.28.0", optional = true}
