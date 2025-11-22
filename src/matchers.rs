@@ -162,10 +162,6 @@ impl JsonMatcher {
             (JsonValue::Float(v), JsonMatcher::Float(matcher)) => matcher.score(v),
             (JsonValue::Int(v), JsonMatcher::Int(matcher)) => matcher.score(v),
             (JsonValue::List(list), JsonMatcher::List(matchers)) => {
-                if matchers.len() != list.len() {
-                    return 0;
-                }
-
                 let mut total_score: u16 = 0;
                 for (m, item) in matchers.iter().zip(list.iter()) {
                     let score = m.score(item);
@@ -203,74 +199,47 @@ impl JsonMatcher {
 // Composition
 
 #[macro_export]
-macro_rules! json_object_entries {
+macro_rules! json_object {
     ( $( $key:expr => $value:expr ),* $(,)? ) => {{
         use std::collections::HashMap;
+        use anymock::matchers::JsonMatcher;
         let mut map: HashMap<String, JsonMatcher> = HashMap::new();
         $(
-            map.insert(($key).into(), $value);
+            map.insert(($key).into(), ($value).into());
         )*
-        map
+        JsonMatcher::Object(map)
     }};
-}
-pub fn json_object(object: HashMap<String, JsonMatcher>) -> JsonMatcher {
-    JsonMatcher::Object(object)
 }
 
 #[macro_export]
-macro_rules! json_list_entries {
+macro_rules! json_list {
     ( $( $value:expr ),* $(,)? ) => {{
-        let mut vec: Vec<JsonMatcher> = Vec::new();
+        let mut list: Vec<JsonMatcher> = Vec::new();
         $(
-            vec.push($value);
+            list.push(($value).into());
         )*
-        vec
+        JsonMatcher::List(list)
     }};
-}
-pub fn json_list(list: Vec<JsonMatcher>) -> JsonMatcher {
-    JsonMatcher::List(list)
 }
 
 // Primitives
 
-pub fn json_str_eq(text: impl Into<String>) -> JsonMatcher {
-    JsonMatcher::Str(text_eq(text.into()))
+impl From<TextMatcher> for JsonMatcher {
+    fn from(value: TextMatcher) -> Self {
+        JsonMatcher::Str(value)
+    }
 }
 
-pub fn json_str_contains(text: impl Into<String>) -> JsonMatcher {
-    JsonMatcher::Str(text_contains(text.into()))
+impl From<IntMatcher> for JsonMatcher {
+    fn from(value: IntMatcher) -> Self {
+        JsonMatcher::Int(value)
+    }
 }
 
-// Int
-
-pub fn json_int_eq(num: impl Into<i128>) -> JsonMatcher {
-    JsonMatcher::Int(int_eq(num.into()))
-}
-
-pub fn json_int_gt(num: impl Into<i128>) -> JsonMatcher {
-    JsonMatcher::Int(int_gt(num.into()))
-}
-
-pub fn json_int_lt(num: impl Into<i128>) -> JsonMatcher {
-    JsonMatcher::Int(int_lt(num.into()))
-}
-
-// Float
-
-pub fn json_float_eq(num: impl Into<f64>) -> JsonMatcher {
-    JsonMatcher::Float(float_eq(num.into()))
-}
-
-pub fn json_float_gt(num: impl Into<f64>) -> JsonMatcher {
-    JsonMatcher::Float(float_gt(num.into()))
-}
-
-pub fn json_float_lt(num: impl Into<f64>) -> JsonMatcher {
-    JsonMatcher::Float(float_lt(num.into()))
-}
-
-pub fn json_bool(value: bool) -> JsonMatcher {
-    JsonMatcher::Bool(value)
+impl From<FloatMatcher> for JsonMatcher {
+    fn from(value: FloatMatcher) -> Self {
+        JsonMatcher::Float(value)
+    }
 }
 
 impl From<JsonValue> for JsonMatcher {

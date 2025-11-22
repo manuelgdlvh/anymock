@@ -149,23 +149,19 @@ The WebSocket stubs are **OnConnect** and **OnMessage**. You can create them usi
 
 
 ```rust
+
 on_connect()
     .with_header("authorization", text_eq("AAABBBCCCDDD"))
     .with_header("dummy-header", text_contains("Dummy"))
     .returning_text("Just works!");
 
-
 ```
 
 ```rust
+
 on_message()
-    .with_json_body_like(json_object(
-        json_object_entries![
-            "name" => json_str_eq("John"),
-            "age"  => json_int_gt(20)
-        ],
-    ))
-    .returning_text("Just works!");
+    .with_json_body_like(json_object!["name" => text_eq("John"), "age" => int_gt(20), "tags" => json_list![text_contains("e")]])
+    .returning_text("Just works!"),
 
 ```
 
