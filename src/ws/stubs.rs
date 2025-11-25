@@ -84,13 +84,11 @@ impl Stub {
                 let mut score = 1;
                 if let Some(header_matchers) = headers {
                     for (k, matcher) in header_matchers.iter() {
-                        if let Some(header) = session_headers.get(k) {
-                            let header_score = matcher.score(header);
-                            if header_score != 0 {
-                                score += header_score;
-                            } else {
-                                return 0;
-                            }
+                        let header_score = matcher.score(session_headers.get(k));
+                        if header_score != 0 {
+                            score += header_score;
+                        } else {
+                            return 0;
                         }
                     }
                 }
@@ -101,26 +99,20 @@ impl Stub {
 
                 if let Some(header_matchers) = request.headers.as_ref() {
                     for (k, matcher) in header_matchers.iter() {
-                        if let Some(header) = session_headers.get(k) {
-                            let header_score = matcher.score(header);
-                            if header_score != 0 {
-                                score += header_score;
-                            } else {
-                                return 0;
-                            }
+                        let header_score = matcher.score(session_headers.get(k));
+                        if header_score != 0 {
+                            score += header_score;
+                        } else {
+                            return 0;
                         }
                     }
                 }
 
-                let payload_score = match (payload, request.payload.as_ref()) {
-                    (Some(payload), Some(matcher)) => matcher.matches(payload),
-                    (Some(_), None) | (None, None) => 1,
-                    (None, Some(_)) => 0,
-                };
-
-                if payload_score == 0 {
-                    return 0;
-                } else {
+                if let Some(payload_matcher) = request.payload.as_ref() {
+                    let payload_score = payload_matcher.score(payload);
+                    if payload_score == 0 {
+                        return 0;
+                    }
                     score += payload_score;
                 }
 

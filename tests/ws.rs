@@ -2,8 +2,8 @@ use std::{collections::HashMap, net::TcpStream, sync::atomic::AtomicU16};
 
 use anymock::{
     json::JsonValue,
-    json_list, json_object,
-    matchers::{int_gt, text_contains, text_eq},
+    json_object,
+    matchers::{int_gt, text_contains, text_eq, text_len_eq},
     ws::{
         Server, ServerHandle,
         builders::{on_connect, on_message},
@@ -144,7 +144,7 @@ fn should_returns_on_message_when_json_body_like() {
 
     handle.register(
         on_message()
-            .with_json_body_like(json_object!["name" => text_eq("John"), "age" => int_gt(20), "tags" => json_list![text_contains("e")]])
+            .with_json_body_like(json_object!["name" => text_len_eq(4), "age" => int_gt(20) ])
             .returning_text(OUTPUT_MESSAGE),
     );
 

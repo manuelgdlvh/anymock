@@ -107,24 +107,43 @@ Thanks to the ranking system, users do not always need to set a fixed priority. 
 
 In the future, we plan to add an option to force a fixed priority and ignore the automatic calculation.
 
+The Fn matchers are intended to provided custom implementation of the score calculation implementing MatcherFn trait.
 
 #### **Text**
 - `Eq`
 - `Contains`
+- `Not Contains`
+- `Regex`
+- `LenEq`
+- `LenGreaterThan`
+- `LenLessThan`
+- `Any`
+- `None`
+- `Fn`
 
 #### **Int**
 - `Eq`
 - `GreaterThan`
 - `LessThan`
+- `Any`
+- `None`
+- `Fn`
 
 #### **Float**
 - `Eq`
 - `GreaterThan`
 - `LessThan`
+- `Any`
+- `None`
+- `Fn`
+
 
 #### **Binary**
 - `Eq`
 - `Contains`
+- `Any`
+- `None`
+- `Fn`
 
 #### **Json**
 This matcher is special because it is built from all the matchers listed above.  
