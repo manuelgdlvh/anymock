@@ -1,4 +1,9 @@
-use std::{collections::HashMap, net::TcpStream, sync::atomic::AtomicU16};
+use std::{
+    collections::HashMap,
+    net::TcpStream,
+    sync::atomic::AtomicU16,
+    time::{Duration, Instant},
+};
 
 use anymock::{
     json::JsonValue,
@@ -154,6 +159,50 @@ fn should_returns_on_message_when_json_body_like() {
     let msg = client.read().unwrap();
     assert!(msg.is_text());
     assert_eq!(msg.into_text().unwrap(), OUTPUT_MESSAGE);
+}
+
+#[test]
+fn should_returns_on_message_when_fixed_delay_applied() {
+    const LOWER_DELAY_MESSAGE: &str = "Just works with lower delay!";
+    const HIGHER_DELAY_MESSAGE: &str = "Just works with higher delay!";
+
+    let now = Instant::now();
+    let lower_delay = Duration::from_secs(1);
+    let higher_delay = Duration::from_secs(3);
+    let handle = listen();
+
+    handle.register(
+        on_message()
+            .with_text_like(text_eq(LOWER_DELAY_MESSAGE))
+            .with_fixed_delay(lower_delay)
+            .returning_text(LOWER_DELAY_MESSAGE),
+    );
+
+    handle.register(
+        on_message()
+            .with_text_like(text_eq(HIGHER_DELAY_MESSAGE))
+            .with_fixed_delay(higher_delay)
+            .returning_text(HIGHER_DELAY_MESSAGE),
+    );
+
+    let mut client = connect(&handle);
+
+    client
+        .send(Message::Text(LOWER_DELAY_MESSAGE.into()))
+        .unwrap();
+    client
+        .send(Message::Text(HIGHER_DELAY_MESSAGE.into()))
+        .unwrap();
+
+    let msg = client.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), LOWER_DELAY_MESSAGE);
+    assert!(now.checked_add(lower_delay).unwrap() <= Instant::now());
+
+    let msg = client.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), HIGHER_DELAY_MESSAGE);
+    assert!(now.checked_add(higher_delay).unwrap() <= Instant::now());
 }
 
 fn listen() -> ServerHandle {

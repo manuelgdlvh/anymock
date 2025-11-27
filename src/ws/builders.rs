@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use crate::{
     json::JsonValue,
     matchers::{Body, BodyMatcher, JsonMatcher, TextMatcher},
-    ws::stubs::{RequestMatcher, ResponseStub, Stub},
+    ws::stubs::{Delay, RequestMatcher, Stub},
 };
 
 pub fn on_connect() -> OnConnectBuilder {
@@ -43,7 +43,7 @@ impl OnConnectBuilder {
     fn build(self, body: Body) -> Stub {
         Stub::Connect {
             headers: self.headers,
-            response: ResponseStub { payload: body },
+            response: body,
         }
     }
 }
@@ -57,6 +57,7 @@ pub fn on_message() -> OnMessageBuilder {
 #[derive(Default)]
 pub struct OnMessageBuilder {
     headers: Option<HashMap<String, TextMatcher>>,
+    delay: Option<Delay>,
     payload: Option<BodyMatcher>,
 }
 
@@ -70,6 +71,16 @@ impl OnMessageBuilder {
             self.headers = Some(headers);
         }
 
+        self
+    }
+
+    pub fn with_fixed_delay(mut self, delay: Duration) -> Self {
+        self.delay = Some(Delay::Fixed(delay));
+        self
+    }
+
+    pub fn with_text_like(mut self, body: impl Into<TextMatcher>) -> Self {
+        self.payload = Some(BodyMatcher::PlainText(body.into()));
         self
     }
 
@@ -101,7 +112,10 @@ impl OnMessageBuilder {
                 headers: self.headers,
                 payload: self.payload,
             },
-            response: ResponseStub { payload: body },
+            delay: self
+                .delay
+                .unwrap_or_else(|| Delay::Fixed(Duration::from_millis(0))),
+            response: body,
         }
     }
 }

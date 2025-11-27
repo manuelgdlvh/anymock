@@ -1,6 +1,10 @@
 # Changelog
 
 
+# `0.3.0`
+
+- Add support for define delay of response messages. [@manuelgdlvh]
+
 # `0.2.0`
 
 - Add possibility of define custom matcher implementations and new set of predefined matchers for all types. [@manuelgdlvh]

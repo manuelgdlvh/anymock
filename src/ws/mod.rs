@@ -1,12 +1,17 @@
 use std::{
-    collections::HashMap,
+    collections::{BinaryHeap, HashMap},
     net::{IpAddr, Ipv4Addr, TcpListener},
     thread,
+    time::{Duration, Instant},
 };
 
 use tungstenite::accept_hdr;
 
-use crate::{json::JsonValue, matchers::Body, ws::stubs::StubsHandle};
+use crate::{
+    json::JsonValue,
+    matchers::Body,
+    ws::stubs::{Msg, StubsHandle},
+};
 
 pub mod builders;
 mod stubs;
@@ -86,39 +91,65 @@ impl Server {
 
             thread::spawn({
                 let stubs_handle = StubsHandle::clone(&stubs_handle);
+                let mut messages: BinaryHeap<Msg> = BinaryHeap::new();
 
                 if let Some(msg) = stubs_handle.on_connect(&headers) {
-                    let _ = websocket.send(msg);
+                    messages.push(msg);
                 }
 
                 move || {
                     loop {
-                        match websocket.read() {
-                            Ok(msg) if msg.is_binary() => {
-                                let payload = Body::Binary(msg.into_data().into());
-                                if let Some(message) = stubs_handle.on_message(&headers, payload) {
-                                    let _ = websocket.send(message);
-                                }
+                        let now = Instant::now();
+                        if messages.is_empty() {
+                            websocket
+                                .get_mut()
+                                .set_read_timeout(Some(Duration::from_millis(1000)))
+                                .expect("failed to set read timeout");
+                        }
+
+                        while let Some(Msg(_, when)) = messages.peek() {
+                            if *when <= now {
+                                let Msg(msg, _) = messages
+                                    .pop()
+                                    .expect("peek returned Some, so pop must succeed");
+
+                                let _ = websocket.send(msg);
+                                continue;
                             }
+                            websocket
+                                .get_mut()
+                                .set_read_timeout(Some(when.duration_since(now)))
+                                .expect("failed to set read timeout");
+
+                            break;
+                        }
+
+                        let payload = match websocket.read() {
+                            Ok(msg) if msg.is_binary() => Body::Binary(msg.into_data().into()),
                             Ok(msg) if msg.is_text() => {
                                 let msg_buf = msg
                                     .into_text()
                                     .expect("Checked previously that's text message");
-                                let msg_str = msg_buf.as_str();
-
-                                let payload = match JsonValue::try_from(msg_str) {
+                                match JsonValue::try_from(msg_buf.as_str()) {
                                     Ok(json) => Body::Json(json),
                                     Err(_) => Body::PlainText(msg_buf.as_str().to_string()),
-                                };
-
-                                if let Some(message) = stubs_handle.on_message(&headers, payload) {
-                                    let _ = websocket.send(message);
                                 }
                             }
-                            Ok(_) => {}
-                            Err(_) => {
-                                break;
+                            Ok(_) => {
+                                continue;
                             }
+                            Err(err) => match err {
+                                tungstenite::Error::Io(_) => {
+                                    continue;
+                                }
+                                _ => {
+                                    break;
+                                }
+                            },
+                        };
+
+                        if let Some(msg) = stubs_handle.on_message(&headers, payload) {
+                            messages.push(msg);
                         }
                     }
                 }

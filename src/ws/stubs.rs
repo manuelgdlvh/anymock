@@ -1,6 +1,8 @@
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     sync::{Arc, RwLock},
+    time::{Duration, Instant},
 };
 
 use serde_json::Value;
@@ -30,7 +32,7 @@ impl StubsHandle {
         }
     }
 
-    pub(crate) fn on_connect(&self, headers: &HashMap<String, String>) -> Option<Message> {
+    pub(crate) fn on_connect(&self, headers: &HashMap<String, String>) -> Option<Msg> {
         Self::get_message(&self.on_connect, headers, None)
     }
 
@@ -38,7 +40,7 @@ impl StubsHandle {
         &self,
         headers: &HashMap<String, String>,
         payload: Body,
-    ) -> Option<Message> {
+    ) -> Option<Msg> {
         Self::get_message(&self.on_message, headers, Some(&payload))
     }
 
@@ -46,7 +48,7 @@ impl StubsHandle {
         stubs: &RwLock<Vec<Stub>>,
         headers: &HashMap<String, String>,
         payload: Option<&Body>,
-    ) -> Option<Message> {
+    ) -> Option<Msg> {
         let mut current_stub: (Option<&Stub>, u16) = (None, 0);
 
         if let Ok(on_message) = stubs.read() {
@@ -69,11 +71,12 @@ impl StubsHandle {
 pub enum Stub {
     Connect {
         headers: Option<HashMap<String, TextMatcher>>,
-        response: ResponseStub,
+        response: Body,
     },
     Message {
         request: RequestMatcher,
-        response: ResponseStub,
+        delay: Delay,
+        response: Body,
     },
 }
 
@@ -121,14 +124,27 @@ impl Stub {
         }
     }
 
-    pub fn message(&self) -> Message {
+    pub fn message(&self) -> Msg {
+        let available_at = match self {
+            Self::Connect { .. } => Instant::now(),
+            Self::Message { delay, .. } => match delay {
+                Delay::Fixed(delay) => Instant::now()
+                    .checked_add(*delay)
+                    .unwrap_or_else(Instant::now),
+            },
+        };
         match self {
-            Self::Connect { response, .. } | Self::Message { response, .. } => match &response
-                .payload
-            {
-                Body::Json(json) => Message::Text(Utf8Bytes::from(&Value::from(json).to_string())),
-                Body::PlainText(text) => Message::Text(Utf8Bytes::from(text.as_str())),
-                Body::Binary(binary) => Message::Binary(Bytes::from(binary.clone())),
+            Self::Connect { response, .. } | Self::Message { response, .. } => match &response {
+                Body::Json(json) => Msg(
+                    Message::Text(Utf8Bytes::from(&Value::from(json).to_string())),
+                    available_at,
+                ),
+                Body::PlainText(text) => {
+                    Msg(Message::Text(Utf8Bytes::from(text.as_str())), available_at)
+                }
+                Body::Binary(binary) => {
+                    Msg(Message::Binary(Bytes::from(binary.clone())), available_at)
+                }
             },
         }
     }
@@ -139,6 +155,25 @@ pub struct RequestMatcher {
     pub(crate) payload: Option<BodyMatcher>,
 }
 
-pub struct ResponseStub {
-    pub(crate) payload: Body,
+pub enum Delay {
+    Fixed(Duration),
+}
+
+#[derive(PartialEq, Eq)]
+pub struct Msg(pub(crate) Message, pub(crate) Instant);
+
+impl PartialOrd for Msg {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Msg {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if self.1 >= other.1 {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    }
 }
