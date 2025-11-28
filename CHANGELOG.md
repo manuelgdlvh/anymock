@@ -1,6 +1,10 @@
 # Changelog
 
 
+# `0.4.1`
+
+- Add improvements in API for periodic message stub builder. [@manuelgdlvh]
+
 # `0.4.0`
 
 - Add periodical message stub. [@manuelgdlvh]

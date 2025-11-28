@@ -190,7 +190,8 @@ on_message()
 on_periodical()
     .with_fixed_delay(Duration::from_millis(200))
     .returning_text("Just works with first message!")
-    .build(Body::PlainText("Just works with second message!".into())),
+    .returning_text("Just works with second message!")
+    .build()
 
 ```
 

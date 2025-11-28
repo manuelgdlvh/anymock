@@ -8,7 +8,7 @@ use std::{
 use anymock::{
     json::JsonValue,
     json_object,
-    matchers::{Body, int_gt, text_contains, text_eq, text_len_eq},
+    matchers::{int_gt, text_contains, text_eq, text_len_eq},
     ws::{
         Server, ServerHandle,
         builders::{on_connect, on_message, on_periodical},
@@ -216,7 +216,8 @@ fn should_returns_on_periodical() {
         on_periodical()
             .with_fixed_delay(Duration::from_millis(200))
             .returning_text(MESSAGE_1)
-            .build(Body::PlainText(MESSAGE_2.into())),
+            .returning_text(MESSAGE_2)
+            .build(),
     );
 
     let mut client_1 = connect(&handle);

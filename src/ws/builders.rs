@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, marker::PhantomData, time::Duration};
 
 use rand::distr::{Alphanumeric, SampleString};
 
@@ -134,19 +134,28 @@ impl OnMessageBuilder {
 
 // Periodical Message
 
-pub fn on_periodical() -> OnPeriodicalBuilder {
-    OnPeriodicalBuilder::default()
+pub fn on_periodical() -> OnPeriodicalBuilder<NeedsBody> {
+    OnPeriodicalBuilder::<NeedsBody> {
+        _phantom_data: PhantomData::<NeedsBody>,
+        id: None,
+        headers: None,
+        delay: None,
+        responses: Vec::new(),
+    }
 }
 
-#[derive(Default)]
-pub struct OnPeriodicalBuilder {
+pub struct NeedsBody;
+pub struct Ready;
+
+pub struct OnPeriodicalBuilder<T> {
     id: Option<String>,
     headers: Option<HashMap<String, TextMatcher>>,
     delay: Option<Delay>,
     responses: Vec<Body>,
+    _phantom_data: PhantomData<T>,
 }
 
-impl OnPeriodicalBuilder {
+impl<T> OnPeriodicalBuilder<T> {
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.id = Some(id.into());
         self
@@ -179,23 +188,34 @@ impl OnPeriodicalBuilder {
         self
     }
 
-    pub fn returning_text(mut self, text: impl Into<String>) -> Self {
+    pub fn returning_text(mut self, text: impl Into<String>) -> OnPeriodicalBuilder<Ready> {
         self.responses.push(Body::PlainText(text.into()));
-        self
+        self.into_ready()
     }
 
-    pub fn returning_json(mut self, json: impl Into<JsonValue>) -> Self {
+    pub fn returning_json(mut self, json: impl Into<JsonValue>) -> OnPeriodicalBuilder<Ready> {
         self.responses.push(Body::Json(json.into()));
-        self
+        self.into_ready()
     }
 
-    pub fn returning_binary(mut self, buff: impl Into<Vec<u8>>) -> Self {
+    pub fn returning_binary(mut self, buff: impl Into<Vec<u8>>) -> OnPeriodicalBuilder<Ready> {
         self.responses.push(Body::Binary(buff.into()));
-        self
+        self.into_ready()
     }
 
-    pub fn build(mut self, body: Body) -> Stub {
-        self.responses.push(body);
+    fn into_ready(self) -> OnPeriodicalBuilder<Ready> {
+        OnPeriodicalBuilder {
+            id: self.id,
+            headers: self.headers,
+            delay: self.delay,
+            responses: self.responses,
+            _phantom_data: PhantomData::<Ready>,
+        }
+    }
+}
+
+impl OnPeriodicalBuilder<Ready> {
+    pub fn build(self) -> Stub {
         Stub::Periodical {
             id: self
                 .id
