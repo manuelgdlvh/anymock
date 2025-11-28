@@ -1,6 +1,6 @@
 [package]
 name = "anymock"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 authors = ["Manuel Garcia De la Vega Hoyo <manuelgdlvh@gmail.com>"]
 
@@ -20,6 +20,7 @@ tungstenite = {version = "0.28.0", optional = true}
 serde = "1.0.228"
 serde_json = "1.0.145"
 regex = "1.12.2"
+rand = "0.9.2"
 
 [lib]
 name = "anymock"

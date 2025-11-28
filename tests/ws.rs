@@ -8,10 +8,10 @@ use std::{
 use anymock::{
     json::JsonValue,
     json_object,
-    matchers::{int_gt, text_contains, text_eq, text_len_eq},
+    matchers::{Body, int_gt, text_contains, text_eq, text_len_eq},
     ws::{
         Server, ServerHandle,
-        builders::{on_connect, on_message},
+        builders::{on_connect, on_message, on_periodical},
     },
 };
 use tungstenite::{Message, WebSocket, handshake::client::Request, stream::MaybeTlsStream};
@@ -203,6 +203,40 @@ fn should_returns_on_message_when_fixed_delay_applied() {
     assert!(msg.is_text());
     assert_eq!(msg.into_text().unwrap(), HIGHER_DELAY_MESSAGE);
     assert!(now.checked_add(higher_delay).unwrap() <= Instant::now());
+}
+
+#[test]
+fn should_returns_on_periodical() {
+    const MESSAGE_1: &str = "Just works with first message!";
+    const MESSAGE_2: &str = "Just works with second message!";
+
+    let handle = listen();
+
+    handle.register(
+        on_periodical()
+            .with_fixed_delay(Duration::from_millis(200))
+            .returning_text(MESSAGE_1)
+            .build(Body::PlainText(MESSAGE_2.into())),
+    );
+
+    let mut client_1 = connect(&handle);
+    let mut client_2 = connect(&handle);
+
+    let msg = client_1.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), MESSAGE_1);
+
+    let msg = client_1.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), MESSAGE_2);
+
+    let msg = client_2.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), MESSAGE_1);
+
+    let msg = client_2.read().unwrap();
+    assert!(msg.is_text());
+    assert_eq!(msg.into_text().unwrap(), MESSAGE_2);
 }
 
 fn listen() -> ServerHandle {

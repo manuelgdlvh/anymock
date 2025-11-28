@@ -164,7 +164,7 @@ All these data schemas are modeled using the `Body` type, and you can create the
 ## WebSocket Stubs
 
 
-The WebSocket stubs are **OnConnect** and **OnMessage**. You can create them using the `on_connect()` and `on_message()` helper functions located in **builders** module.
+The WebSocket stubs are **OnConnect**, **OnMessage** and **OnPeriodical**. You can create them using the `on_connect()`, `on_message()` and `on_periodical()` helper functions located in **builders** module.
 
 
 ```rust
@@ -181,6 +181,16 @@ on_connect()
 on_message()
     .with_json_body_like(json_object!["name" => text_eq("John"), "age" => int_gt(20), "tags" => json_list![text_contains("e")]])
     .returning_text("Just works!"),
+
+```
+
+
+```rust
+
+on_periodical()
+    .with_fixed_delay(Duration::from_millis(200))
+    .returning_text("Just works with first message!")
+    .build(Body::PlainText("Just works with second message!".into())),
 
 ```
 

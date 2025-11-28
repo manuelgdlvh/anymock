@@ -99,6 +99,10 @@ impl Server {
 
                 move || {
                     loop {
+                        if let Some(msgs) = stubs_handle.on_periodical(&headers) {
+                            messages.extend(msgs);
+                        }
+
                         let now = Instant::now();
                         if messages.is_empty() {
                             websocket

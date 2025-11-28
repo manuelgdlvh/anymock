@@ -1,5 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
+use rand::distr::{Alphanumeric, SampleString};
+
 use crate::{
     json::JsonValue,
     matchers::{Body, BodyMatcher, JsonMatcher, TextMatcher},
@@ -74,6 +76,16 @@ impl OnMessageBuilder {
         self
     }
 
+    pub fn with_delay_interval_in(mut self, lower: Duration, upper: Duration) -> Self {
+        match (lower, upper) {
+            (lower, upper) if lower == upper => self.delay = Some(Delay::Fixed(lower)),
+            (lower, upper) if lower > upper => self.delay = Some(Delay::Interval(upper, lower)),
+            (lower, upper) => self.delay = Some(Delay::Interval(lower, upper)),
+        }
+
+        self
+    }
+
     pub fn with_fixed_delay(mut self, delay: Duration) -> Self {
         self.delay = Some(Delay::Fixed(delay));
         self
@@ -116,6 +128,83 @@ impl OnMessageBuilder {
                 .delay
                 .unwrap_or_else(|| Delay::Fixed(Duration::from_millis(0))),
             response: body,
+        }
+    }
+}
+
+// Periodical Message
+
+pub fn on_periodical() -> OnPeriodicalBuilder {
+    OnPeriodicalBuilder::default()
+}
+
+#[derive(Default)]
+pub struct OnPeriodicalBuilder {
+    id: Option<String>,
+    headers: Option<HashMap<String, TextMatcher>>,
+    delay: Option<Delay>,
+    responses: Vec<Body>,
+}
+
+impl OnPeriodicalBuilder {
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn with_header(mut self, key: impl Into<String>, matcher: TextMatcher) -> Self {
+        if let Some(headers) = self.headers.as_mut() {
+            headers.insert(key.into(), matcher);
+        } else {
+            let mut headers = HashMap::new();
+            headers.insert(key.into(), matcher);
+            self.headers = Some(headers);
+        }
+
+        self
+    }
+
+    pub fn with_delay_interval_in(mut self, lower: Duration, upper: Duration) -> Self {
+        match (lower, upper) {
+            (lower, upper) if lower == upper => self.delay = Some(Delay::Fixed(lower)),
+            (lower, upper) if lower > upper => self.delay = Some(Delay::Interval(upper, lower)),
+            (lower, upper) => self.delay = Some(Delay::Interval(lower, upper)),
+        }
+
+        self
+    }
+
+    pub fn with_fixed_delay(mut self, delay: Duration) -> Self {
+        self.delay = Some(Delay::Fixed(delay));
+        self
+    }
+
+    pub fn returning_text(mut self, text: impl Into<String>) -> Self {
+        self.responses.push(Body::PlainText(text.into()));
+        self
+    }
+
+    pub fn returning_json(mut self, json: impl Into<JsonValue>) -> Self {
+        self.responses.push(Body::Json(json.into()));
+        self
+    }
+
+    pub fn returning_binary(mut self, buff: impl Into<Vec<u8>>) -> Self {
+        self.responses.push(Body::Binary(buff.into()));
+        self
+    }
+
+    pub fn build(mut self, body: Body) -> Stub {
+        self.responses.push(body);
+        Stub::Periodical {
+            id: self
+                .id
+                .unwrap_or_else(|| Alphanumeric.sample_string(&mut rand::rng(), 16)),
+            headers: self.headers,
+            delay: self
+                .delay
+                .unwrap_or_else(|| Delay::Fixed(Duration::from_millis(0))),
+            responses: self.responses,
         }
     }
 }
