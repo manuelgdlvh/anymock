@@ -1,6 +1,6 @@
 [package]
 name = "anymock"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2024"
 authors = ["Manuel Garcia De la Vega Hoyo <manuelgdlvh@gmail.com>"]
 

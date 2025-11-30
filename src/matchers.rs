@@ -336,6 +336,7 @@ impl JsonMatcher {
 
                 total_score
             }
+            (v, JsonMatcher::Fn(matcher)) => matcher.score(v),
             (_, _) => 0,
         }
     }
@@ -728,6 +729,32 @@ mod tests {
                     && gt_score > none_score
                     && none_score > any_score
             );
+        }
+    }
+
+    mod json {
+        use crate::{json::JsonValue, matchers::json_fn};
+
+        fn json_none_or_list(value: Option<&JsonValue>) -> u16 {
+            let score = if let Some(value) = value {
+                match value {
+                    JsonValue::List(_) => 1,
+                    _ => 0,
+                }
+            } else {
+                1
+            };
+
+            score
+        }
+
+        #[test]
+        fn should_json_fn_returns_expected_scores() {
+            let matcher = json_fn(json_none_or_list);
+
+            assert_eq!(1, matcher.score(None));
+            assert_eq!(1, matcher.score(Some(&JsonValue::List(vec![]))));
+            assert_eq!(0, matcher.score(Some(&JsonValue::Str("text!".into()))));
         }
     }
 }

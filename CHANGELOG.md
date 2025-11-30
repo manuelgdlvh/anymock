@@ -1,5 +1,8 @@
 # Changelog
 
+# `0.4.2`
+
+- Add Fn variant to JSON matcher. [@manuelgdlvh]
 
 # `0.4.1`
 
